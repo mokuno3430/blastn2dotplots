@@ -1,0 +1,2 @@
+gnl|scaffold|RH17_T1-C11_3	RHB43-C11 plasmid2
+gnl|scaffold|RH17_T1-C11_4	RHB43-C11 plasmid3
