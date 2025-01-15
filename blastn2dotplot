@@ -139,9 +139,9 @@ class Colorbox:
             # 数字のプロット
             if( i*self.BIN % SCALE == 0 ):
                 if SCALE < 1:
-                    ax2.text( cell_originx - self.cell_width/2, self.origin_y-0.004, i*self.BIN, fontsize = font_size, color = 'black', ha='center', va='top', transform=fig.transFigure )
+                    ax2.text( cell_originx - self.cell_width/2, self.origin_y-0.004, i*self.BIN, fontsize = font_size, ha='center', va='top', transform=fig.transFigure )
                 else:
-                    ax2.text( cell_originx - self.cell_width/2, self.origin_y-0.004, int( i*self.BIN ), fontsize = font_size, color = 'black', ha='center', va='top', transform=fig.transFigure )
+                    ax2.text( cell_originx - self.cell_width/2, self.origin_y-0.004, int( i*self.BIN ), fontsize = font_size, ha='center', va='top', transform=fig.transFigure )
 
     def output_parameters( self ):
         print( '##Colorbox paramenters:' )
@@ -214,7 +214,7 @@ def func_get_args():
                          type=validate_range, default=0.10, metavar="float" )
     parser.add_argument( '--colormap', help='Optional: colormap for identity of alignments ( 0:binary, 1:bone_r, 2:inferno_r, 3:hot_r, 4:YlGnBu, 5:original) (default 5)',
                          choices=[ 0, 1, 2, 3, 4, 5 ], default=5, type=int )
-    parser.add_argument( '-v', '--version', action='version', version='%(prog)s v.1.0', default=False )
+    parser.add_argument( '-v', '--version', action='version', version='%(prog)s v.1.1', default=False )
 
     args = parser.parse_args()
     args.figure_size = validate_figure_size(args.figure_size)
@@ -240,11 +240,11 @@ def func_set_subplots_parameters( table_db, table_qry, args ):
                                  gridspec_kw=dict(width_ratios=table_qry['len'].tolist(),
                                                   height_ratios=table_db['len'].tolist() ))
     if args.left_edge >= args.right_edge :
-        print(f"Error: 'left_edge' ({args.left_edge}) is greater than 'right_edge' ({args.right_edge}). Using the default values.", file=sys.stderr )
+        print(f"Error: 'left_edge' ({args.left_edge}) is equal to or greater than 'right_edge' ({args.right_edge}). Using the default values.", file=sys.stderr )
         args.left_edge = 0.15
         args.right_edge = 0.95
     if args.bottom_edge >= args.top_edge :
-        print(f"Error: 'bottom_edge' ({args.bottom_edge}) is greater than 'top_edge' ({args.top_edge}). Using the default values.", file=sys.stderr )
+        print(f"Error: 'bottom_edge' ({args.bottom_edge}) is equal to or greater than 'top_edge' ({args.top_edge}). Using the default values.", file=sys.stderr )
         args.top_edge = 0.90
         args.bottom_edge = 0.10
     fig.subplots_adjust(hspace=hs, wspace=ws, left=args.left_edge, right=args.right_edge, top=args.top_edge, bottom=args.bottom_edge )
@@ -487,9 +487,17 @@ def func_plot_highlights( fn, table_row, table_column, ax, alpha ):
         if not clr.is_color_like( buf.color ):
             print( f"Error: {buf.color} is an invalid color. Calculation will continue.", file=sys.stderr )
             continue
+        try:
+            # buf.position を float に変換して数値であることを確認
+            s_pos = float( buf.start )
+            e_pos = float( buf.end )
+        except ValueError:
+            # float に変換できない場合をスキップ
+            print(f"Skipping invalid values (--highlight): {buf.seqid} {buf.start} {buf.end} {buf.color} ")
+            continue
         #y軸scaffoldへのhighlight
         if buf.seqid in table_row['scaffold'].values:
-            y = [ buf.start, buf.start, buf.end, buf.end ]
+            y = [ s_pos, s_pos, e_pos, e_pos ]
             i = table_row.index[ table_row['scaffold'] == buf.seqid ][0]
             for j in range( 0, len( table_column ) ):
                 x_max = table_column.at[j, 'len']
@@ -497,7 +505,7 @@ def func_plot_highlights( fn, table_row, table_column, ax, alpha ):
                 ax[i][j].fill( x, y, color=buf.color, linewidth=0, alpha=alpha )
         #x軸scaffoldへのhighlight
         if buf.seqid in table_column['scaffold'].values:
-            x = [ buf.start, buf.end, buf.end, buf.start ]
+            x = [ s_pos, e_pos, e_pos, s_pos ]
             j = table_column.index[ table_column['scaffold'] == buf.seqid ][0]
             for i in range( 0, len( table_row)):
                 y_max = table_row.at[i, 'len']
@@ -515,10 +523,18 @@ def func_plot_crossed( fn, table_row, table_column, ax, alpha ):
         if not clr.is_color_like( buf.color ):
             print( f"Error: {buf.color} is an invalid color. Calculation will continue.", file=sys.stderr )
             continue
+        try:
+            # buf.position を float に変換して数値であることを確認
+            s_pos = float( buf.start )
+            e_pos = float( buf.end )
+        except ValueError:
+            # float に変換できない場合をスキップ
+            print(f"Skipping invalid values (--highlight_crossed): {buf.seqid} {buf.start} {buf.end} {buf.color} ")
+            continue
         if buf.seqid in table_row['scaffold'].values and buf.seqid in table_column['scaffold'].values :
-            y = [ buf.start, buf.start, buf.end, buf.end ]
+            y = [ s_pos, s_pos, e_pos, e_pos ]
             i = table_row.index[ table_row['scaffold'] == buf.seqid ][0]
-            x = [ buf.start, buf.end, buf.end, buf.start ]
+            x = [ s_pos, e_pos, e_pos, s_pos ]
             j = table_column.index[ table_column['scaffold'] == buf.seqid ][0]
             ax[i][j].fill( x, y, color=buf.color, linewidth=0, alpha=alpha )
 
@@ -565,16 +581,23 @@ def func_input_tsv_for_grid( fn ):
         print( e, file=sys.stderr )
         return( pd.DataFrame() )
 
+
 def func_plot_grids ( grids, table_row, table_column, ax, color ):
     grid_color = color
     if not clr.is_color_like( grid_color ):
         print( f"Error: '{grid_color}' is an invalid color. 'grey' has been used for the grid lines instead.", file=sys.stderr )
         grid_color = 'grey'
-
     for buf in grids.itertuples():
+        try:
+            # buf.position を float に変換して数値であることを確認
+            position = float(buf.position)
+        except ValueError:
+            # float に変換できない場合をスキップ
+            print( f"Skipping invalid value (--manual_grid): {buf.seqid} {buf.position}" )
+            continue
         #y軸scaffoldへのhighlight
         if buf.seqid in table_row['scaffold'].values:
-            y = [ buf.position, buf.position ]
+            y = [ position, position ]
             i = table_row.index[ table_row['scaffold'] == buf.seqid ][0]
             for j in range( 0, len( table_column ) ):
                 x_max = table_column.at[j, 'len']
@@ -582,14 +605,14 @@ def func_plot_grids ( grids, table_row, table_column, ax, color ):
                 ax[i][j].plot( x, y, color=grid_color, lw=0.3, linestyle='dotted' )
         #x軸scaffoldへのhighlight
         if buf.seqid in table_column['scaffold'].values:
-            x = [ buf.position, buf.position ]
+            x = [ position, position ]
             j = table_column.index[ table_column['scaffold'] == buf.seqid ][0]
             for i in range( 0, len( table_row)):
                 y_max = table_row.at[i, 'len']
                 y = [0, y_max ]
                 ax[i][j].plot( x, y, color=grid_color, lw=0.3, linestyle='dotted' )
 
-                
+
 def func_print_messages():
     print( 'start' )
     print( ' '.join( sys.argv ))
