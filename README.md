@@ -11,7 +11,7 @@ This project requires Python 3.8 or higher, along with the following libraries:
 - `numpy`
 
 ## Description
-`blastn2dotplots.py`: A script for visualizing multiple dot-plot alignments from BLASTN output.
+`blastn2dotplots`: A script for visualizing multiple dot-plot alignments from BLASTN output.
 
 ## Usage
 ```
