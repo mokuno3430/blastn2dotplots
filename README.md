@@ -2,7 +2,8 @@
 
 This repository contains the `blastn2dotplots` script and sample data.
 
-
+## Description
+`blastn2dotplots`: A script for visualizing multiple dot-plot alignments from BLASTN output.
 
 ## Requirements
 This project requires Python 3.8 or higher, along with the following libraries:
@@ -11,8 +12,29 @@ This project requires Python 3.8 or higher, along with the following libraries:
 - `pandas 2.0.3`
 - `numpy 1.24.4`
 
-## Description
-`blastn2dotplots`: A script for visualizing multiple dot-plot alignments from BLASTN output.
+## Installation
+
+Create a new conda environment (optional)
+```
+conda create -n blastn2dotplots-env python=3.8
+conda activate blastn2dotplots-env
+```
+
+Install required libraries (if not already installed)
+```
+conda install matplotlib=3.7.1 numpy=1.24.4 pandas=2.0.3
+```
+
+Clone the repository
+```
+git clone https://github.com/mokuno3430/blastn2dotplots.git
+```
+
+Grant execute permission to the script
+```
+cd blastn2dotplots
+chmod u+x blastn2dotplot
+```
 
 ## Usage
 ```
@@ -106,3 +128,81 @@ cd sample_data/figure3A
 ./runme.sh
 ```
 3. The resulting dot plot will be saved in the same directory as a PDF file.
+
+
+## tips
+### preparation files
+#### Query and Database Files (Required)
+The `-i1` and `-i2` options are used to specify the query and database sequences, respectively. If `-i2` is omitted, the tool automatically treats `-i1` as both the query and database, generating a self-alignment plot.
+
+Subplots are displayed according to the order of sequences in the files:
+
+- **Database sequences** (`-i1`, vertical axis) are arranged from **top to bottom**.
+- **Query sequences** (`-i2`, horizontal axis) are arranged from **left to right**.
+
+Each file should be a tab-separated text file with the following format:
+
+- **Minimum required format**:
+  - **Column 1:** Sequence ID
+   
+- **Optional extended formats**:  
+  - **Column 1:** Sequence ID
+  - **Column 2:** Display name (optional)
+  
+  or
+	
+  - **Column 1:** Sequence ID
+  - **Column 2:** Display name (optional)
+  - **Column 3:** Start position (optional; for adjusting axis scale)
+	
+  or
+	
+  - **Column 1:** Sequence ID
+  - **Column 2:** Display name (optional)
+  - **Column 3:** Start position (optional; shifts the origin of the axis scale)
+  - **Column 4:** Orientation (optional; `+` or `-`)
+
+If only the first column (Sequence ID) is needed, these files can be easily generated from the blastn output:
+```
+cut -f 1 blastn_outfmt6.txt | sort | uniq > query.txt
+cut -f 2 blastn_outfmt6.txt | sort | uniq > db.txt
+```
+
+#### Highlight regions (Optional)
+
+To highlight specific regions, prepare a tab-delimited file and use either the `--highlight` or `--highlight_crossed` option. The format is the same for both:
+
+- **Column 1:** Sequence ID 
+- **Column 2:** Start position (0-based)
+- **Column 3:** End position
+- **Column 4:** Color code (e.g., `#FF0000` for red)
+
+No header or index is required.
+**Example (`highlights.txt`):**
+```
+plasmid1    5000    15000    #FF9999
+```
+See Figure 2A and related explanations in the manuscript for more details.
+
+#### Grid lines (Optional)
+
+To add user-defined grid lines, prepare a tab-delimited text file and specify it with the `--manual_grid` option. The file must contain two columns:
+- **Column 1:** Sequence ID
+- **Column 2:** Position (0-based coordinate)
+
+No header or index is required. This is useful for marking structural variant breakpoints or other specific loci.
+
+**Example (`grids.txt`):**
+```
+chromosome1    1000000
+```
+
+Refer to Figure 2B and the main text for usage details.
+
+### colormap examples
+To represent alignment identity, _blastn2dotplots_ supports six built-in colormaps.  
+These can be specified using the `--colormap` option.
+
+The default colormap is a rainbow gradient (`--colormap 5`), but users are encouraged to select alternative colormaps—such as those designed for perceptual uniformity or color-blind accessibility—depending on their visualization needs.
+
+Example outputs for each colormap are shown below.
