@@ -206,3 +206,5 @@ These can be specified using the `--colormap` option.
 The default colormap is a rainbow gradient (`--colormap 5`), but users are encouraged to select alternative colormaps—such as those designed for perceptual uniformity or color-blind accessibility—depending on their visualization needs.
 
 Example outputs for each colormap are shown below.
+
+<img src="https://github.com/user-attachments/assets/94447dbe-593e-4e28-ae35-285dc96f25fc" width="500">
