@@ -6,7 +6,7 @@ This repository contains the `blastn2dotplots` script and sample data.
 `blastn2dotplots`: A script for visualizing multiple dot-plot alignments from BLASTN output.
 
 ## Requirements
-This project requires Python 3.8 or higher, along with the following libraries:
+This project has been tested with the following environment:
 - `python 3.8.20`
 - `matplotlib 3.7.3`
 - `pandas 2.0.3`
