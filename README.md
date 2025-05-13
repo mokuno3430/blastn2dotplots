@@ -132,7 +132,7 @@ cd sample_data/figure3A
 
 ## tips
 ### preparation files
-#### Query and Database Files (Required)
+#### **Query and Database Files (Required)**
 The `-i1` and `-i2` options are used to specify the query and database sequences, respectively. If `-i2` is omitted, the tool automatically treats `-i1` as both the query and database, generating a self-alignment plot.
 
 Subplots are displayed according to the order of sequences in the files:
@@ -168,7 +168,7 @@ cut -f 1 blastn_outfmt6.txt | sort | uniq > query.txt
 cut -f 2 blastn_outfmt6.txt | sort | uniq > db.txt
 ```
 
-#### Highlight regions (Optional)
+#### **Highlight regions (Optional)**
 
 To highlight specific regions, prepare a tab-delimited file and use either the `--highlight` or `--highlight_crossed` option. The format is the same for both:
 
@@ -184,7 +184,7 @@ plasmid1    5000    15000    #FF9999
 ```
 See Figure 2A and related explanations in the manuscript for more details.
 
-#### Grid lines (Optional)
+#### **Grid lines (Optional)**
 
 To add user-defined grid lines, prepare a tab-delimited text file and specify it with the `--manual_grid` option. The file must contain two columns:
 - **Column 1:** Sequence ID
@@ -208,3 +208,33 @@ The default colormap is a rainbow gradient (`--colormap 5`), but users are encou
 Example outputs for each colormap are shown below.
 
 <img src="https://github.com/user-attachments/assets/94447dbe-593e-4e28-ae35-285dc96f25fc" width="500">
+
+
+### Support for Additional Aligners
+
+In addition to `blastn`, the tool also supports alignment results from other commonly used aligners, such as **Minimap2** and **MUMmer (nucmer)**. We provide utility scripts that convert their outputs into the BLASTN-like format (`-outfmt '6 std qlen slen'`) accepted by `blastn2dotplots`.
+
+#### **Minimap2**
+
+To use Minimap2 output, run Minimap2 with the `-c` option to include CIGAR strings in the PAF output. This information is required for computing alignment identity.
+
+- `-c`: Output CIGAR in PAF format (required)
+```
+minimap2 -c ref.fa query.fa > minimap2-output.paf
+perl paf2blastn-fmt6.pl minimap2-output.paf > out_blastn-fmt6-like.txt
+```
+
+#### **MUMmer (nucmer)**
+
+To use MUMmer's `nucmer` output, process it with `show-coords` using the `-l` and `-T` options to generate a tab-delimited file with sequence lengths.
+
+- `-l`: Include the sequence length information in the output (required)
+- `-T`: Tab-delimited output format (required)
+
+```
+nucmer ref.fa query.fa -p nucmer-out
+show-coords -l -T nucmer-out.delta > nucmer-output.coords
+perl nucmer-coords2blastn-fmt6.pl nucmer-output.coords > out_blastn-fmt6-like.txt
+```
+> 🔹 _Note: These conversion scripts are located in the `utilities` folder of the repository._
+
