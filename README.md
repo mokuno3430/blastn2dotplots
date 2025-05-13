@@ -123,11 +123,15 @@ sample_data
 ```
 cd sample_data/figure3A
 ```
-2. Run the runme.sh script:
+2. Grant execute permission to the script
+```
+chmod u+x runme.sh
+```
+3. Run the runme.sh script:
 ```
 ./runme.sh
 ```
-3. The resulting dot plot will be saved in the same directory as a PDF file.
+4. The resulting dot plot will be saved in the same directory as a PDF file.
 
 
 ## tips
