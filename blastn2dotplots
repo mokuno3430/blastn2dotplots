@@ -14,50 +14,59 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 
 def main():
+    # Parse command-line arguments
     args = func_get_args()
+
+    # Print startup message and executed command
     func_print_messages( )
+
+    # Set font type to avoid text rendering issues in PDF outputs
     matplotlib.rcParams['pdf.fonttype'] = 42
     matplotlib.rcParams['ps.fonttype'] = 42
 
-    #blastのアライメント結果の読み込み
+    # Load BLASTN alignment results
     blastn = func_input_blastn6( args.blastn, args.min_identity, args.min_alignlen )
 
-    #ラベル名と配列長の情報の読み込み
+    # Load sequence ID lists for rows (-i1) and columns (-i2)
     table_db = func_input_list( args.input1, blastn, 'slen' )
     if args.input2 is None:
+        # If -i2 is not provided, use reversed -i1 for self-alignment style layout
         table_qry = func_input_list( args.input1, blastn, 'qlen' )
         table_qry = table_qry.iloc[::-1].reset_index( drop=True ) 
     else:
         table_qry = func_input_list( args.input2, blastn, 'qlen' )
 
-    #manual grid
+    # Load optional gridline file
     my_grid = pd.DataFrame()
     if args.manual_grid != None:
         my_grid = func_input_tsv_for_grid( args.manual_grid )
         if not my_grid.empty:
             args.show_grid = False
 
-    #subplotのサイズ、軸の設定など
+    # Set up figure and subplot axes
     fig, ax = func_set_subplots_parameters( table_db, table_qry, args )
 
+    # Plot manual gridlines if provided
     if not my_grid.empty:
         func_plot_grids( my_grid, table_db, table_qry, ax, args.grid_color )
 
-    #blastnの結果を可視化
+    # Create colormap for alignments and plot alignment lines
     heatmap = Colormap( args.min_identity, 100, args.colormap )
     func_plot_alignments( blastn, table_db, table_qry, heatmap, ax, args.line_width )
+
+    # Plot colormap legend
     colormap_legend = Colorbox( heatmap, ax, args.figure_size )
     colormap_legend.plot( ax, heatmap, fig, args.tick_label_size )
 
-    #highlightの表示
+    # Plot optional highlight regions
     if args.highlight != None:
         func_plot_highlights( args.highlight, table_db, table_qry, ax, args.h_alpha )
             
-    #highlight crossedの表示
+    # Plot optional crossed highlights
     if args.highlight_crossed != None:
         func_plot_crossed( args.highlight_crossed, table_db, table_qry, ax, args.h_alpha )
 
-    #結果の保存
+    # Save the figure to PDF
     pdf_file = args.out + '.pdf'
     pp = PdfPages( pdf_file )
     pp.savefig( fig )
@@ -67,14 +76,33 @@ def main():
 
 
 class Colormap:
+    """
+    Handles colormap generation and mapping for sequence alignment identity values.
+
+    This class provides functionality to:
+    - Define a set of available colormaps (including a custom one).
+    - Map a percent identity value to a corresponding RGBA color.
+    - Output colormap parameters for logging or debugging purposes.
+
+    Attributes:
+        cmaps (list): List of available colormap objects from matplotlib.
+        cmap_list (list): Corresponding names of the colormaps.
+        mycm: Custom-defined colormap named 'original'.
+    
+    Parameters:
+        min_identity (float): Minimum identity value for the color scale.
+        max_identity (float): Maximum identity value for the color scale.
+        cm (int): Index of the selected colormap from `cmaps`.
+        alpha (float): Alpha (transparency) value for the colormap.
+    """
     pallet = {
         'red'  :((0.00, 0.10, 0.10), (0.25, 0.10, 0.10), (0.40, 0.30, 0.30), (0.60, 1.00, 1.00), (0.80, 0.90, 0.90), (1.00, 0.70, 0.70)),
         'green':((0.00, 0.10, 0.10), (0.25, 0.60, 0.60), (0.40, 0.80, 0.80), (0.60, 0.75, 0.75), (0.80, 0.30, 0.30), (1.00, 0.15, 0.15)),
         'blue' :((0.00, 0.40, 0.40), (0.25, 1.00, 1.00), (0.40, 0.25, 0.25), (0.60, 0.00, 0.00), (0.80, 0.05, 0.05), (1.00, 0.20, 0.20))
     }
     mycm = clr.LinearSegmentedColormap('original', pallet )
-    cmaps = [ cm.binary, cm.bone_r, cm.inferno_r, cm.hot_r, cm.YlGnBu, mycm ]
-    cmap_list = [ 'binary', 'bone_r', 'inferno_r', 'hot_r', 'YlGnBu', 'original' ]
+    cmaps = [ cm.bone_r, cm.hot_r, cm.BuPu, cm.YlOrRd, cm.YlGnBu, mycm ]
+    cmap_list = [ 'bone_r', 'hot_r', 'BuPu', 'YlOrRd', 'YlGnBu', 'original' ]
 
     def __init__( self, min_identity, max_identity, cm, alpha=1 ):
         self.min_identity = min_identity
@@ -83,11 +111,23 @@ class Colormap:
         self.cm = cm
 
     def convert_identity2color( self, identity ):
+        """
+        Converts a percent identity value to a corresponding RGBA color.
+        
+        Args:
+            identity (float): Identity value to convert.
+
+        Returns:
+            tuple: RGBA color from the selected colormap.
+        """
         color_value=( identity - self.min_identity )/( self.max_identity - self.min_identity )
         align_color=Colormap.cmaps[ self.cm ]( color_value )
         return align_color
 
     def output_parameters( self ):
+        """
+        Prints the current colormap parameters for logging/debugging.
+        """
         print( '##Colormap paramenters:' )
         print( '  min_identity: %d' % ( self.min_identity))
         print( '  max_identity: %d' % ( self.max_identity ))
@@ -97,7 +137,21 @@ class Colormap:
 
 
 class Colorbox:
+    """
+    Handles the generation and rendering of a color scale (legend) for percent identity values.
+
+    This class is used to plot a horizontal color scale legend representing identity values 
+    for sequence alignments in the dot plot. It automatically adjusts the scale bar resolution 
+    and layout based on the plotting area and the identity value range.
+
+    Parameters:
+        heatmap: An object containing min_identity, max_identity, and colormap information.
+        ax: A 2D list of matplotlib AxesSubplot objects.
+        figure_size: Tuple indicating the size of the figure in inches (width, height).
+    """
+
     def __init__( self, heatmap, ax, figure_size ):
+        # Determine resolution of color scale (BIN size) based on identity range
         if heatmap.max_identity - heatmap.min_identity <= 2:
             self.BIN = 0.025
         elif heatmap.max_identity - heatmap.min_identity <= 5:
@@ -107,6 +161,7 @@ class Colorbox:
         else:
             self.BIN = 0.5
 
+        # Dynamically set the size and position of the color scale legend
         pos = ax[-1][-1].get_position()
         h_offset = figure_size[1] if figure_size[1] <= 10 else 10
         self.height = 0.15 / h_offset if pos.y0 >= 3.5 * 0.15/h_offset else pos.y0 * 0.25
@@ -116,27 +171,43 @@ class Colorbox:
         self.origin_y = pos.y0 - 2.5 * self.height 
 
     def plot( self, ax, heatmap, fig, font_size ):
+        """
+        Render the color scale (identity legend) on the bottom of the figure.
+
+        Args:
+            ax: A 2D list of matplotlib AxesSubplot objects.
+            heatmap: Object providing the colormap and identity value range.
+            fig: Matplotlib Figure object to apply the transformation.
+            font_size: Base font size for text labels.
+        """
+
         ax2 = ax[-1][0]
         cell_originx = self.origin_x
+        # Determine label step size based on identity range
         SCALE = 5
-        if heatmap.max_identity - heatmap.min_identity <= 1 : #identity 99%以上を表示する時は0.25刻み
+        if heatmap.max_identity - heatmap.min_identity <= 1 :
             SCALE = 0.25
-        elif heatmap.max_identity - heatmap.min_identity <= 2 : #identity 98%以上を表示する時は0.5刻み
+        elif heatmap.max_identity - heatmap.min_identity <= 2 :
             SCALE = 0.5
-        elif heatmap.max_identity - heatmap.min_identity <= 5: #identity 95%以上を表示する時は１刻み
+        elif heatmap.max_identity - heatmap.min_identity <= 5:
             SCALE = 1
-        elif heatmap.max_identity - heatmap.min_identity <= 10: #identity 90%以上の時は2刻み
+        elif heatmap.max_identity - heatmap.min_identity <= 10:
             SCALE = 2
-        #colormapの凡例を表示する
+
+        # Draw color scale label
         ax2.text(self.origin_x, self.origin_y + self.height/2, 'identity (%)  ', va='center', ha='right', transform=fig.transFigure, fontsize=font_size *1.5 )
+
+        # Draw each color cell and corresponding tick label
         for i in range( int(heatmap.min_identity/self.BIN), int(heatmap.max_identity/self.BIN) + 1 ):
             align_color=heatmap.convert_identity2color( i*self.BIN )
             colorbox_x = [ cell_originx, cell_originx + self.cell_width, cell_originx + self.cell_width, cell_originx ]
             colorbox_y = [ self.origin_y, self.origin_y, self.origin_y + self.height, self.origin_y + self.height ]
             cell_originx += self.cell_width
-            # color cellのプロット
+
+            # Fill color cell
             ax2.fill( colorbox_x, colorbox_y, color=align_color, alpha=heatmap.alpha, linewidth=0, transform=fig.transFigure, clip_on=False )
-            # 数字のプロット
+
+            # Add numeric label at appropriate intervals
             if( i*self.BIN % SCALE == 0 ):
                 if SCALE < 1:
                     ax2.text( cell_originx - self.cell_width/2, self.origin_y-0.004, i*self.BIN, fontsize = font_size, ha='center', va='top', transform=fig.transFigure )
@@ -144,6 +215,9 @@ class Colorbox:
                     ax2.text( cell_originx - self.cell_width/2, self.origin_y-0.004, int( i*self.BIN ), fontsize = font_size, ha='center', va='top', transform=fig.transFigure )
 
     def output_parameters( self ):
+        """
+        Print internal layout parameters of the color scale for debugging purposes.
+        """
         print( '##Colorbox paramenters:' )
         print( '  width: %.2f' % ( self.width ))
         print( '  height: %.2f' % ( self.height ))
@@ -165,7 +239,7 @@ def validate_range( value ):
 
 def validate_figure_size( value ):
     try:
-        sizes = [float(v) for v in value]  # 個々の値を float に変換
+        sizes = [float(v) for v in value]
         if len(sizes) != 2:
             raise ValueError( f"--figure_size must contain exactly 2 values. You provided {sizes}." )    
         if any(size < 3 for size in sizes):
@@ -179,31 +253,59 @@ def validate_figure_size( value ):
 
 
 def func_get_args():
+    """
+    Parse and return command-line arguments for blastn2dotplots.
+
+    This function defines and processes a comprehensive set of command-line options for configuring
+    the input data, visualization style, plot layout, and file output for the dot-plot generation script.
+    It returns an argparse.Namespace object containing all parsed arguments.
+    """
+    
     parser = argparse.ArgumentParser( formatter_class=argparse.MetavarTypeHelpFormatter )
+
+    # Input files
     parser.add_argument( '-i1', '--input1', help='sequence IDs of database at blastn (=row)', type=str, required=True )
     parser.add_argument( '-i2', '--input2', help='sequence IDs of query at blastn (=column)', type=str )
     parser.add_argument( '--blastn', help='blastn.tsv (-outfmt \'6 std qlen slen\' at blastn)', type=str, required=True )
+
+    # Output file
     parser.add_argument( '--out', help='Optional: prefix of pdf file (default out)', type=str, default='out' )
+
+    # Highlighting options
     parser.add_argument( '--highlight', help='Optional: positions.tsv (scaffold start end color)', type=str )
     parser.add_argument( '--highlight_crossed', help='Optional: positions.tsv (scaffold start end color)', type=str )
+
+    # Filtering thresholds
     parser.add_argument( '--min_identity', help='Optional: minimum sequence identity (default 90)', type=int, default=90 )
     parser.add_argument( '--min_alignlen', help='Optional: minimum alignment length (default 100)', type=int, default=100 )
+
+    # Plot appearance
     parser.add_argument( '--line_width', help='Optional: line width of dotplots (default 1.0)', type=float, default=1.0 )
     parser.add_argument( '--share', help='Optional: sharing axis scales among subplots.', action='store_true' )
+
+    # Grid options
     parser.add_argument( '--manual_grid', help='Optional: positions.tsv (scaffold position)', type=str )
     parser.add_argument( '--show_grid', help='Optional: show grid-line', action='store_true' )
     parser.add_argument( '--grid_color', help='Optional: grid color (default grey)', type=str, default='grey' )
+
+    # Axis labels and fonts
     parser.add_argument( '--xtitle_rotate', help='Optional: (default 0)', type=int, default=0 )
     parser.add_argument( '--ytitle_rotate', help='Optional: (default 90)', type=int, default=90 )
     parser.add_argument( '--font_size', help='Optional: (default 8)', type=float, default=8 )
+    parser.add_argument( '--tick_label_size', help='Optional: (default 6)', type=float, default=6 )
+    parser.add_argument( '--tick_width', help='Optional: scale width of axis (bp) (default -1 means auto)', type=int, default=-1 )
+
+    # Figure layout
     parser.add_argument( '--figure_size', help='Optional: Specify figure size as two numbers >= 3 (default: [8, 8]).',
                          type=float, nargs=2, default=[8, 8] )
     parser.add_argument( '--hspace', help='Optional: (default -1 means auto)', type=float, default=-1 )
     parser.add_argument( '--wspace', help='Optional: (default -1 means auto)', type=float, default=-1 )
+    
+    # Highlight transparency
     parser.add_argument( '--h_alpha', help='Optional: transparency ratio of highlights (float in the range [0, 1]. default 0.3)',
                          type=validate_range, default=0.3, metavar="float" )
-    parser.add_argument( '--tick_label_size', help='Optional: (default 6)', type=float, default=6 )
-    parser.add_argument( '--tick_width', help='Optional: scale width of axis (bp) (default -1 means auto)', type=int, default=-1 )
+
+    # Edges of plot area
     parser.add_argument( '--left_edge', help='Optional: the position of the left edge of the subplots, as a fraction of the figure width (float in the range [0, 1]. default 0.15)',
                          type=validate_range, default=0.15, metavar="float" )
     parser.add_argument( '--right_edge', help='Optional: the position of the right edge of the subplots (float in the range [0, 1]. default 0.95)',
@@ -212,10 +314,15 @@ def func_get_args():
                          type=validate_range, default=0.90, metavar="float" )
     parser.add_argument( '--bottom_edge', help='Optional: the position of the bottom edge of the subplots (float in the range [0, 1]. default 0.10)',
                          type=validate_range, default=0.10, metavar="float" )
-    parser.add_argument( '--colormap', help='Optional: colormap for identity of alignments ( 0:binary, 1:bone_r, 2:inferno_r, 3:hot_r, 4:YlGnBu, 5:original) (default 5)',
-                         choices=[ 0, 1, 2, 3, 4, 5 ], default=5, type=int )
-    parser.add_argument( '-v', '--version', action='version', version='%(prog)s v.1.1', default=False )
 
+    # Colormap options
+    parser.add_argument( '--colormap', help='Optional: colormap for identity of alignments ( 0:bone_r, 1:hot_r, 2:BuPu, 3:YlOrRd, 4:YlGnBu, 5:original) (default 5)',
+                         choices=[ 0, 1, 2, 3, 4, 5 ], default=5, type=int )
+
+    # Version info
+    parser.add_argument( '-v', '--version', action='version', version='%(prog)s v.1.1.2', default=False )
+
+    # Final validation
     args = parser.parse_args()
     args.figure_size = validate_figure_size(args.figure_size)
 
@@ -223,10 +330,27 @@ def func_get_args():
 
 
 def func_set_subplots_parameters( table_db, table_qry, args ):
+    """
+    Configure subplot layout and figure parameters for the dot plot.
+
+    This function sets up the grid of subplots based on the lengths of the sequences provided
+    in the database (rows) and query (columns). It optionally shares axis scales among subplots
+    and adjusts the layout spacing and figure boundaries based on the user-specified arguments.
+
+    Parameters:
+        table_db (DataFrame): Table containing database sequence IDs and lengths (used for vertical axes).
+        table_qry (DataFrame): Table containing query sequence IDs and lengths (used for horizontal axes).
+        args (argparse.Namespace): Parsed command-line arguments controlling layout, margins, and spacing.
+
+    Returns:
+        fig (matplotlib.figure.Figure): The main matplotlib figure object.
+        ax (ndarray): A 2D array of Axes objects representing the subplots.
+    """
     share = args.share
     figure_size = args.figure_size
-    #それぞれのsubplotのサイズを配列長に調整
-    #--share y軸目盛を一番左のplotのみ, x軸目盛を一番下のplotのみにする場合に使用
+
+    # Adjust subplot layout based on sequence lengths
+    # If not sharing axes: show individual axis ticks for each subplot
     if not share:
         ws = 0.15 if args.wspace == -1 else args.wspace
         hs = 0.15 if args.hspace == -1 else args.hspace
@@ -239,49 +363,79 @@ def func_set_subplots_parameters( table_db, table_qry, args ):
         fig, ax  = plt.subplots( len(table_db), len(table_qry), figsize=(figure_size[0], figure_size[1]),sharex='col', sharey='row',
                                  gridspec_kw=dict(width_ratios=table_qry['len'].tolist(),
                                                   height_ratios=table_db['len'].tolist() ))
+
+    # Validate and apply figure edge parameters 
     if args.left_edge >= args.right_edge :
         print(f"Error: 'left_edge' ({args.left_edge}) is equal to or greater than 'right_edge' ({args.right_edge}). Using the default values.", file=sys.stderr )
         args.left_edge = 0.15
         args.right_edge = 0.95
+
+    # Apply layout adjustments
     if args.bottom_edge >= args.top_edge :
         print(f"Error: 'bottom_edge' ({args.bottom_edge}) is equal to or greater than 'top_edge' ({args.top_edge}). Using the default values.", file=sys.stderr )
         args.top_edge = 0.90
         args.bottom_edge = 0.10
     fig.subplots_adjust(hspace=hs, wspace=ws, left=args.left_edge, right=args.right_edge, top=args.top_edge, bottom=args.bottom_edge )
 
-    #どんなsubplotsも擬似的に2次元配列として扱うための操作
+    # Ensure ax is always a 2D array for consistent indexing
     if isinstance(ax, plt.Axes):
         ax = np.array([[ax]])
     else:
         ax = ax.reshape( len(table_db), len( table_qry) )
-    #subplotの大きさ、目盛, grid線などの設定
+
+    # Apply additional formatting (tick marks, labels, gridlines, etc.)
     fig, ax = func_for_multi_plots( fig, ax, table_db, table_qry, args )
     return fig, ax
 
 
 def func_for_multi_plots( fig, ax, table_db, table_qry, args ):
+    """
+    Configure subplot axes, labels, tick marks, and gridlines for dot plot visualization.
+
+    This function sets axis limits, tick labels, titles, and gridlines for each subplot based
+    on the database and query sequence lengths and orientations. It also applies user-specified
+    options such as axis label rotation, shared axes, and customized grid colors.
+
+    Parameters:
+        fig (matplotlib.figure.Figure): Main figure object.
+        ax (ndarray): 2D array of subplot Axes objects.
+        table_db (DataFrame): Table of database sequences (rows), with length, label, orientation.
+        table_qry (DataFrame): Table of query sequences (columns), with length, label, orientation.
+        args (argparse.Namespace): Parsed command-line arguments for layout and styling.
+
+    Returns:
+        fig (matplotlib.figure.Figure): Updated figure object.
+        ax (ndarray): Updated array of subplot Axes.
+    """
+    
     x_rotate = args.xtitle_rotate
     y_rotate = args.ytitle_rotate
     grid = args.show_grid
-
     grid_color = args.grid_color
+
+    # Validate grid color
     if not clr.is_color_like( grid_color ):
         print( f"Error: '{grid_color}' is an invalid color. 'grey' has been used for the grid lines instead.", file=sys.stderr )
         grid_color = 'grey'
     
     title_font_size = args.font_size
     tick_label_size = args.tick_label_size
+    
+    # Determine scale for axis ticks
     max_width = table_db['len'].max() if table_db['len'].max() > table_qry['len'].max() else table_qry['len'].max()
     sum_width = table_db['len'].sum() if table_db['len'].sum() > table_qry['len'].sum() else table_qry['len'].sum()
     mr, unit, width = func_set_tick_label( max_width, sum_width )
     width = width if args.tick_width == -1 else args.tick_width
-    # 軸の範囲の指定など
+
+    # Configure each subplot
     for i in range( 0, len( table_db )):
         strain_y=table_db.at[ i, 'label']
         y_max = table_db.at[ i, 'len']
         for j in range( 0, len( table_qry ) ):
             strain_x=table_qry.at[ j, 'label']
             x_max = table_qry.at[j, 'len']
+
+            # Set axis direction based on strand
             if table_qry.at[j, 'strand'] == '+':
                 ax[i][j].set_xlim( 0, x_max )
             else:
@@ -290,38 +444,46 @@ def func_for_multi_plots( fig, ax, table_db, table_qry, args ):
                 ax[i][j].set_ylim( 0, y_max )
             else:
                 ax[i][j].set_ylim( y_max, 0 )
-            ax[i][j].spines["right"].set_linewidth(0.5) #線の太さは0.5
-            ax[i][j].spines["left"].set_linewidth(0.5) #線の太さは0.5
-            ax[i][j].spines["bottom"].set_linewidth(0.5) #線の太さは0.5
-            ax[i][j].spines["top"].set_linewidth(0.5) #線の太さは0.5
+
+            # Set axis line width
+            for spine in ["right", "left", "bottom", "top"]:
+                ax[i][j].spines[spine].set_linewidth(0.5)
 
             ax[i][j].xaxis.set_tick_params( width=0.5 )
             ax[i][j].yaxis.set_tick_params( width=0.5 )
-            if grid: #grid線を引く
-                ax[i][j].grid( axis='both', color=grid_color, lw=0.3, linestyle='dotted' )
-            ax[i][j].set_aspect('equal', adjustable='box') #縦横比が1:1になるようにする
 
-            # 一番左のdotplotsにtitleを表示
+            # Add grid lines if enabled
+            if grid:
+                ax[i][j].grid( axis='both', color=grid_color, lw=0.3, linestyle='dotted' )
+
+            # Set aspect ratio to 1:1
+            ax[i][j].set_aspect('equal', adjustable='box')
+
+            # Add vertical axis label to leftmost column
             if( j == 0 ):
-                ypad = 15 if y_rotate == 90 else 30 #y titleの位置を設定するための小手先の操作
+                ypad = 15 if y_rotate == 90 else 30
                 ax[i][j].set_ylabel( strain_y, fontsize=title_font_size, labelpad=ypad, rotation=y_rotate, va='center' )
 
+            # Determine tick start positions
             y_spos = table_db.at[i, 'start_pos']
             s_ytick = (( int( y_spos / width ) + 1) * width) - y_spos
             x_spos = table_qry.at[j, 'start_pos']
             s_xtick = (( int( x_spos / width ) + 1) * width) - x_spos
 
-            # y軸目盛の表示
+            # Configure y-axis ticks
             ax[i][j].tick_params( axis='y', which='both', length=1, pad=1 )
             ax[i][j].set_yticks( np.arange( s_ytick, y_max, width ) )
-            # 一番上のdotplotsにtitleを表示
+
+            # Add title to top row
             if( i == 0 ):
                 xpad = 10
-                ax[i][j].set_title( strain_x, fontsize=title_font_size, rotation=x_rotate, pad=xpad ) #rotateで角度調整
-            #x軸の目盛を表示
+                ax[i][j].set_title( strain_x, fontsize=title_font_size, rotation=x_rotate, pad=xpad )
+
+            # Configure x-axis ticks
             ax[i][j].tick_params( axis='x', which='both', length=1, pad=1 )
             ax[i][j].set_xticks( np.arange( s_xtick, x_max, width ) )
 
+            # Format tick labels (divided by mr unit)
             if width % mr == 0:
                 ax[i][j].set_yticklabels( (np.arange( ( y_spos + s_ytick), (y_spos + y_max), width)/mr).astype(int), fontsize=tick_label_size )
                 ax[i][j].set_xticklabels( (np.arange( ( x_spos + s_xtick), (x_spos + x_max), width)/mr).astype(int), fontsize=tick_label_size )
@@ -329,14 +491,33 @@ def func_for_multi_plots( fig, ax, table_db, table_qry, args ):
                 ax[i][j].set_yticklabels( np.arange( ( y_spos + s_ytick), (y_spos + y_max), width )/mr , fontsize=tick_label_size )
                 ax[i][j].set_xticklabels( np.arange( ( x_spos + s_xtick), (x_spos + x_max), width )/mr, fontsize=tick_label_size )
 
-    #左上に単位を表示する
+    # Add scale unit label to upper-left subplot
     ax[0][0].text( 0, 1.02, unit, fontsize = tick_label_size, color = 'black', ha='right', va='bottom', transform=ax[0][0].transAxes )
     return fig, ax
 
 
 def func_set_tick_label( max_len, sum_len ):
-    mr = 1 #3桁区切り
-    unit = '(bp)' #単位
+    """
+    Determine appropriate axis tick unit, label unit (bp/kbp/Mbp/Gbp), and tick interval.
+
+    This function calculates a major unit (mr), corresponding unit label (e.g., "(kbp)"), and
+    a visually appropriate tick interval (width) based on the input maximum sequence length.
+    The goal is to ensure that axis labels remain readable and are scaled properly across different genome sizes.
+
+    Parameters:
+        max_len (int): Maximum sequence length among query or database sequences.
+        sum_len (int): Total sum of lengths (not used in the current implementation but reserved for future use).
+
+    Returns:
+        mr (int): Magnitude for tick label formatting (e.g., 1000 for kbp).
+        unit (str): Unit label string (e.g., "(kbp)").
+        width (int): Interval between tick marks on the axis.
+    """
+
+    mr = 1 # default: base unit in base pairs
+    unit = '(bp)'
+
+    # Determine unit label and magnitude based on log scale
     if 9 <= math.log10( max_len ):
         mr = 10 ** 9
         unit = '(Gbp)'
@@ -346,7 +527,8 @@ def func_set_tick_label( max_len, sum_len ):
     elif 3 <= math.log10( max_len ):
         mr = 10 ** 3
         unit = '(kbp)'
-    #要はいい感じの目盛幅にしたい 目盛の数字は1、２, 5, 10, 20, 50, 100, 200, 500のどれか
+
+    # Choose a "nice" tick interval (1, 2, 5, 10, etc.)
     width=int( math.pow( 10, int( math.log10( max_len )))/5 )
     if math.pow( 10, int( math.log10( max_len )))/ max_len <= 0.2:
         width=int( math.pow( 10, int( math.log10( max_len ))) )
@@ -356,43 +538,93 @@ def func_set_tick_label( max_len, sum_len ):
 
 
 def func_plot_alignments( blastn, table_row, table_column, heatmap, ax, line_width ):
-    #アライメント結果のplot
+    """
+    Plot alignment blocks as colored lines on dot plot subplots.
+
+    This function iterates over the BLASTN output and draws alignments between query and
+    database sequences using the color corresponding to alignment identity. Each alignment
+    is drawn as a line between (qstart, sstart) and (qend, send) in the appropriate subplot.
+
+    Parameters:
+        blastn (DataFrame): Parsed BLASTN result table (with qseqid, sseqid, identity, qstart, qend, sstart, send).
+        table_row (DataFrame): Metadata for the database sequences (row axis).
+        table_column (DataFrame): Metadata for the query sequences (column axis).
+        heatmap (Colormap): Colormap object for converting identity to color.
+        ax (ndarray): Array of subplot axes for drawing alignments.
+        line_width (float): Line width for plotting alignments.
+
+    Returns:
+        None
+    """
+    # Iterate over all BLAST alignments
     for b_out in blastn.itertuples():
+        # Skip if either sequence ID is not in the axis tables
         if b_out.sseqid not in table_row['scaffold'].values:
             continue
         if b_out.qseqid not in table_column['scaffold'].values:
             continue
+
+        # Convert identity score to a color
         c_value = heatmap.convert_identity2color( float( b_out.identity ))
+
+        # Get subplot indices
         i = table_row.index[ table_row['scaffold'] == b_out.sseqid ][0]
         j = table_column.index[ table_column['scaffold'] == b_out.qseqid ][0]
+
+        # Plot the alignment line
         ax[ i ][ j ].plot( [ b_out.qstart, b_out.qend ], [ b_out.sstart, b_out.send ],color=c_value, lw=line_width )
 
 
 def func_input_blastn6( fn, min_identity, min_alignlength ):
+    """
+    Parse and filter a BLASTN output file in tabular format (-outfmt '6 std qlen slen').
+
+    This function reads a BLASTN result file, checks for required format and content,
+    extracts the necessary columns, renames them for clarity, and filters the results
+    based on minimum identity and alignment length thresholds.
+
+    Parameters:
+        fn (str): Path to the BLASTN output file.
+        min_identity (float): Minimum percent identity required for an alignment to be included.
+        min_alignlength (int): Minimum alignment length required.
+
+    Returns:
+        DataFrame: Filtered BLASTN alignments as a pandas DataFrame.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file is empty or missing required columns, or if no valid alignments remain after filtering.
+    """
     required_columns = [0, 1, 2, 6, 7, 8, 9, 12, 13]
     try:
-        if not os.path.exists(fn): #ファイルがない場合
+        # Check if the file exists
+        if not os.path.exists(fn):
             raise FileNotFoundError(f"Error: {fn} does not exist.")
 
-        if os.path.getsize(fn) == 0 : #ファイルが空の場合
+        # Check if the file is empty
+        if os.path.getsize(fn) == 0 :
             raise ValueError(f"Error: {fn} is empty.")
 
+        # Read the file
         df = pd.read_csv( fn, sep='\t', header=None )
-        if df.shape[1] < 14:  # 要求された列数に足りない場合
+
+        # Ensure that the required number of columns are present
+        if df.shape[1] < 14:
             raise ValueError(
                 "Error: The input file does not contain the required columns.\n"
                 "Please run blastn with the option \"-outfmt '6 std qlen slen'\" to generate the correct output format."
             )
 
-        df = df[required_columns]  # 要求された列だけを抽出
+        # Extract required columns and assign column names
+        df = df[required_columns]
         df.columns = ['qseqid', 'sseqid', 'identity', 'qstart', 'qend', 'sstart', 'send', 'qlen', 'slen' ]
-
         df['qseqid'] = df['qseqid'].astype(str)
         df['sseqid'] = df['sseqid'].astype(str)
 
-        # identityとalignment lengthでフィルタリング
+        # Filter alignments by identity and alignment length
         blastn = df[ (df['identity'] >= min_identity) & (df['qend'] - df['qstart'] + 1 >= min_alignlength ) ]
 
+        # Raise error if no alignments remain
         if blastn.empty:
             raise ValueError(
                 f"Error: No alignments available for visualization in {fn}.\n"
@@ -401,25 +633,52 @@ def func_input_blastn6( fn, min_identity, min_alignlength ):
         return blastn
 
     except (FileNotFoundError, ValueError) as e:
-        # エラーメッセージを表示してプログラムを中断
+        # Print error message and exit
         print( e, file=sys.stderr )
         sys.exit( 1 )
 
 
 def func_input_list( fn, blastn, len_ID ):
+    """
+    Load and process a sequence ID list file, optionally including labels, start positions, and strand information.
+
+    This function reads a TSV file that defines the list of sequences to be plotted as query or database,
+    and combines it with length information extracted from a BLASTN result DataFrame.
+
+    Parameters:
+        fn (str): Path to the input TSV file. Can have 1 to 4 columns:
+                  [scaffold], [scaffold, label], [scaffold, label, start_pos], or
+                  [scaffold, label, start_pos, strand ('+' or '-')].
+        blastn (DataFrame): BLASTN results DataFrame with 'qseqid', 'sseqid', 'qlen', and 'slen' columns.
+        len_ID (str): Either 'qlen' or 'slen', indicating whether to pull lengths from query or subject side.
+
+    Returns:
+        DataFrame: A table with scaffold ID, label, strand, start position, and length of each sequence.
+
+    Raises:
+        FileNotFoundError: If the input file does not exist.
+        ValueError: If the input file is empty or results in an empty table.
+    """
     try:
+        # Check file existence
         if not os.path.exists(fn):
             raise FileNotFoundError(f"Error: {fn} does not exist.")
 
+        # Check if the file is empty
         if os.path.getsize(fn) == 0:
             raise ValueError(f"Error: {fn} is empty.")
 
+        # Read the table
         table = pd.read_csv( fn, sep='\t', header=None )
         num_columns = table.shape[1]
+
+        # Define default column names
         scaffold_col = 'scaffold'
         label_col = 'label'
         strand_col = 'strand'
         start_pos_col = 'start_pos'
+
+        # Handle input with 1–4 columns
         if( num_columns == 1 ):
             table.columns = [scaffold_col]
             table[label_col] = table[ scaffold_col ]
@@ -429,73 +688,114 @@ def func_input_list( fn, blastn, len_ID ):
             table.columns = [scaffold_col, label_col]
             table[strand_col] = '+'
             table[start_pos_col] = 0
-        else:
-            unique_strand_values = set(table[2].unique())
+        elif( num_columns == 3 ):
+            table.columns = [scaffold_col, label_col, start_pos_col]
+            table[strand_col] = '+'
+        elif( num_columns == 4 ):
+            # Validate strand values
+            unique_strand_values = set(table[3].unique())
             if unique_strand_values.issubset({'+', '-'}):
-                table.columns = [scaffold_col, label_col, strand_col]
-                table[start_pos_col] = 0
-            else:
-                # 一時的な対応: strand情報がない場合
-                table.columns = [scaffold_col, label_col, start_pos_col]
-                table[strand_col] = '+'
+                table.columns = [scaffold_col, label_col, start_pos_col, strand_col]
 
+        # Ensure table is not empty
+        if table.empty:
+            raise ValueError( "The DataFrame is empty. Please check your sequence IDs in {}.".format( fn ) )
+        
         table['scaffold'] = table['scaffold'].astype(str)
-        #blastnの結果から配列長を取り出す
+
+        # Extract sequence lengths from BLASTN results
         if len_ID == 'qlen':
             lens = blastn.set_index('qseqid')['qlen'].to_dict()
         else:
             lens = blastn.set_index('sseqid')['slen'].to_dict()
-        #配列長のデータを追加
+
+        # Add sequence length to table
         table["len"] = table["scaffold"].map( lens )
-        #blastにhitがない配列はlengthの情報が取り出せないので除外
+
+        # Remove entries without length (i.e., no BLAST hit)
         table = table.dropna(subset=['len']).reset_index(drop=True)
-        if table.empty:
-            raise ValueError( "The DataFrame is empty. Please check your sequence IDs in {}.".format( fn ) )
         return table
     
     except (FileNotFoundError, ValueError) as e:
-        # エラーメッセージを表示してプログラムを中断
+        # Display error and exit
         print(e, file=sys.stderr)
         sys.exit(1)
 
 
 def func_input_tsv_for_highlight( fn ):
+    """
+    Loads a TSV file containing regions to be highlighted on the dot plot.
+
+    The file must have four tab-separated columns: sequence ID, start position,
+    end position, and color code. If the file is missing, empty, or improperly formatted,
+    an error message is printed and an empty result is returned.
+
+    Parameters:
+        fn (str): Path to the TSV file.
+
+    Returns:
+        DataFrame: A DataFrame with columns ['seqid', 'start', 'end', 'color'], or
+        None if the file is invalid or not found.
+    """
     try:
+        # Check that the file exists
         if not os.path.exists(fn):
             raise FileNotFoundError(f"Error: {fn} does not exist. Calculation will continue.")
+        # Check that the file is not empty
         if os.path.getsize(fn) == 0:
             raise ValueError(f"Error: {fn} is empty. Calculation will continue.")
 
+        # Attempt to load the file
         df = pd.read_csv( fn, sep='\t', header=None )
+
+        # Validate the number of columns
         if df.shape[1] != 4:
             raise ValueError("Error: The file should have at four columns: contig_ID, start_pos, end_pos and colorcode. Calculation will continue.")
+
+        # Assign column names
         df.columns = ['seqid', 'start', 'end', 'color' ]
         df['seqid'] = df['seqid'].astype(str)
         return( df )
+    
     except (FileNotFoundError, ValueError) as e:
-        # エラーメッセージを表示
+        # Print error message and return None
         print( e, file=sys.stderr )
         return(  )
 
+    
 def func_plot_highlights( fn, table_row, table_column, ax, alpha ):
+    """
+    Draws rectangular highlights on the dot plot based on a user-provided TSV file.
+
+    Highlights are applied to either x- or y-axis sequences depending on where the matched
+    sequence ID appears (in the query or database list). Each rectangle spans the full
+    axis of the opposing sequence and covers the start-to-end range on the specified sequence.
+
+    Parameters:
+        fn (str): Path to the TSV file defining highlight regions.
+        table_row (DataFrame): Information about the sequences on the y-axis (database).
+        table_column (DataFrame): Information about the sequences on the x-axis (query).
+        ax (2D array of Axes): The grid of subplot axes to draw on.
+        alpha (float): Transparency value for the highlight rectangles (range: 0–1).
+    """
     highlight = func_input_tsv_for_highlight( fn )
     if highlight.empty:
         return
     
-    alpha = alpha
     for buf in highlight.itertuples():
+        # Skip if color code is invalid
         if not clr.is_color_like( buf.color ):
             print( f"Error: {buf.color} is an invalid color. Calculation will continue.", file=sys.stderr )
             continue
         try:
-            # buf.position を float に変換して数値であることを確認
+            # Ensure start and end are numeric
             s_pos = float( buf.start )
             e_pos = float( buf.end )
         except ValueError:
-            # float に変換できない場合をスキップ
             print(f"Skipping invalid values (--highlight): {buf.seqid} {buf.start} {buf.end} {buf.color} ")
             continue
-        #y軸scaffoldへのhighlight
+
+        # Highlight region on y-axis (row) if seqid matches a database sequence
         if buf.seqid in table_row['scaffold'].values:
             y = [ s_pos, s_pos, e_pos, e_pos ]
             i = table_row.index[ table_row['scaffold'] == buf.seqid ][0]
@@ -503,7 +803,8 @@ def func_plot_highlights( fn, table_row, table_column, ax, alpha ):
                 x_max = table_column.at[j, 'len']
                 x = [ 0, x_max, x_max, 0 ]
                 ax[i][j].fill( x, y, color=buf.color, linewidth=0, alpha=alpha )
-        #x軸scaffoldへのhighlight
+
+        # Highlight region on x-axis (column) if seqid matches a query sequence
         if buf.seqid in table_column['scaffold'].values:
             x = [ s_pos, e_pos, e_pos, s_pos ]
             j = table_column.index[ table_column['scaffold'] == buf.seqid ][0]
@@ -514,23 +815,39 @@ def func_plot_highlights( fn, table_row, table_column, ax, alpha ):
 
 
 def func_plot_crossed( fn, table_row, table_column, ax, alpha ):
+    """
+    Plot crossed highlights between matching regions on the row and column axes.
+
+    This function takes a TSV file of regions with the same color and attempts to 
+    draw rectangular highlights on dot plots to indicate shared or corresponding
+    regions between query and database sequences.
+
+    Parameters:
+        fn (str): Path to the TSV file for highlight_crossed (format: scaffold, start, end, color).
+        table_row (DataFrame): Table of database sequences used for the vertical axis.
+        table_column (DataFrame): Table of query sequences used for the horizontal axis.
+        ax (ndarray): 2D array of matplotlib Axes objects representing the subplots.
+        alpha (float): Transparency level of the highlight rectangles.
+    """
+
     highlight_c = func_input_tsv_for_highlight( fn )
     if highlight_c.empty:        
         return
 
-    alpha = alpha
     for buf in highlight_c.itertuples():
+        # Check color format validity
         if not clr.is_color_like( buf.color ):
             print( f"Error: {buf.color} is an invalid color. Calculation will continue.", file=sys.stderr )
             continue
         try:
-            # buf.position を float に変換して数値であることを確認
+            # Validate and convert start/end to float
             s_pos = float( buf.start )
             e_pos = float( buf.end )
         except ValueError:
-            # float に変換できない場合をスキップ
             print(f"Skipping invalid values (--highlight_crossed): {buf.seqid} {buf.start} {buf.end} {buf.color} ")
             continue
+
+        # Case where the same sequence appears on both axes (self-alignment)
         if buf.seqid in table_row['scaffold'].values and buf.seqid in table_column['scaffold'].values :
             y = [ s_pos, s_pos, e_pos, e_pos ]
             i = table_row.index[ table_row['scaffold'] == buf.seqid ][0]
@@ -538,15 +855,17 @@ def func_plot_crossed( fn, table_row, table_column, ax, alpha ):
             j = table_column.index[ table_column['scaffold'] == buf.seqid ][0]
             ax[i][j].fill( x, y, color=buf.color, linewidth=0, alpha=alpha )
 
+        # Compare all pairs in the table to find matching color regions across different sequences
         for buf2 in highlight_c.itertuples():
             if buf.Index >= buf2.Index:
-                continue
+                continue # Avoid duplicate or reverse comparisons
             if not clr.is_color_like( buf2.color ):
                 print( f"Error: {buf2.color} is an invalid color. Calculation will continue.", file=sys.stderr )
                 continue
             if buf.color != buf2.color :
-                continue
-            #y軸scaffoldへのhighlight
+                continue # Only compare regions with the same color
+
+            # Highlight when buf is on the y-axis and buf2 is on the x-axis
             if buf.seqid in table_row['scaffold'].values and buf2.seqid in table_column['scaffold'].values :
                 y = [ buf.start, buf.start, buf.end, buf.end ]
                 i = table_row.index[ table_row['scaffold'] == buf.seqid ][0]
@@ -554,7 +873,7 @@ def func_plot_crossed( fn, table_row, table_column, ax, alpha ):
                 j = table_column.index[ table_column['scaffold'] == buf2.seqid ][0]
                 ax[i][j].fill( x, y, color=buf.color, linewidth=0, alpha=alpha )
 
-            #x軸scaffoldへのhighlight
+            # Highlight when buf is on the x-axis and buf2 is on the y-axis
             if buf.seqid in table_column['scaffold'].values and buf2.seqid in table_row['scaffold'].values :
                 x = [ buf.start, buf.end, buf.end, buf.start ]
                 j = table_column.index[ table_column['scaffold'] == buf.seqid ][0]
@@ -564,38 +883,89 @@ def func_plot_crossed( fn, table_row, table_column, ax, alpha ):
 
 
 def func_input_tsv_for_grid( fn ):
+    """
+    Load a TSV file for grid line positions.
+
+    This function reads a two-column TSV file that specifies positions at which
+    manual grid lines should be added to the dot plot visualization.
+    The two required columns are:
+        1. Sequence ID (contig or scaffold name)
+        2. Position (integer, zero-based)
+
+    Parameters:
+        fn (str): Path to the TSV file.
+
+    Returns:
+        pd.DataFrame: A DataFrame with columns ['seqid', 'position'], or an empty
+                      DataFrame if the file is missing, empty, or malformed.
+    """
     try:
+         # Check that the file exists
         if not os.path.exists(fn):
             raise FileNotFoundError(f"Error: {fn} does not exist. Calculation will continue.")
+
+        # Check that the file is not empty
         if os.path.getsize(fn) == 0:
             raise ValueError(f"Error: {fn} is empty. Calculation will continue.")
-        
+
+        # Load the file as a tab-delimited file with no header
         df = pd.read_csv( fn, sep='\t', header=None )
+
+        # Check that it has exactly 2 columns
         if df.shape[1] != 2:
             raise ValueError("Error: The file should have at two columns: contig_ID, position. Calculation will continue.")
+
+        # Assign proper column names
         df.columns = ['seqid', 'position' ]
+
+        # Ensure sequence ID is treated as string
         df['seqid'] = df['seqid'].astype(str)
+        
         return( df )
+    
     except (FileNotFoundError, ValueError) as e:
-        # エラーメッセージを表示
+        # Print error message to stderr and return empty DataFrame
         print( e, file=sys.stderr )
         return( pd.DataFrame() )
 
 
 def func_plot_grids ( grids, table_row, table_column, ax, color ):
+    """
+    Plot user-defined grid lines onto the dot plot.
+
+    This function adds dotted grid lines to specific positions along the x- or y-axes
+    of each subplot, based on a user-provided TSV file (loaded into `grids`). Each grid line
+    is plotted only on subplots where the specified sequence ID matches either a row (y-axis)
+    or column (x-axis) sequence.
+
+    Parameters:
+        grids (pd.DataFrame): A DataFrame with columns ['seqid', 'position'], specifying
+                              where to add grid lines.
+        table_row (pd.DataFrame): Table of database sequences corresponding to the y-axis.
+        table_column (pd.DataFrame): Table of query sequences corresponding to the x-axis.
+        ax (np.ndarray): 2D array of subplot axes.
+        color (str): Color name/code for the grid lines.
+
+    Returns:
+        None
+    """
     grid_color = color
+
+    # Validate the provided color
     if not clr.is_color_like( grid_color ):
         print( f"Error: '{grid_color}' is an invalid color. 'grey' has been used for the grid lines instead.", file=sys.stderr )
         grid_color = 'grey'
+
+        
     for buf in grids.itertuples():
         try:
-            # buf.position を float に変換して数値であることを確認
+            # Convert position to float; skip if invalid
             position = float(buf.position)
         except ValueError:
-            # float に変換できない場合をスキップ
             print( f"Skipping invalid value (--manual_grid): {buf.seqid} {buf.position}" )
             continue
-        #y軸scaffoldへのhighlight
+
+        # Plot horizontal grid lines for matching sequence in y-axis (rows)
         if buf.seqid in table_row['scaffold'].values:
             y = [ position, position ]
             i = table_row.index[ table_row['scaffold'] == buf.seqid ][0]
@@ -603,7 +973,8 @@ def func_plot_grids ( grids, table_row, table_column, ax, color ):
                 x_max = table_column.at[j, 'len']
                 x = [ 0, x_max ]
                 ax[i][j].plot( x, y, color=grid_color, lw=0.3, linestyle='dotted' )
-        #x軸scaffoldへのhighlight
+
+        # Plot vertical grid lines for matching sequence in x-axis (columns)
         if buf.seqid in table_column['scaffold'].values:
             x = [ position, position ]
             j = table_column.index[ table_column['scaffold'] == buf.seqid ][0]
@@ -614,7 +985,16 @@ def func_plot_grids ( grids, table_row, table_column, ax, color ):
 
 
 def func_print_messages():
+    """
+    Print startup message and the executed command-line arguments.
+
+    This function prints a simple 'start' message followed by the full list of command-line
+    arguments that were used to execute the script. This is useful for logging and debugging.
+    """
+    # Print start message
     print( 'start' )
+
+    # Print the executed command (all command-line arguments)
     print( ' '.join( sys.argv ))
 
 
