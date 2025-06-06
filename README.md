@@ -242,3 +242,9 @@ perl nucmer-coords2blastn-fmt6.pl nucmer-output.coords > out_blastn-fmt6-like.tx
 ```
 > 🔹 _Note: These conversion scripts are located in the `utilities` folder of the repository._
 
+## Citation
+If you use this software, please cite:
+
+Okuno, M., Yamamoto, T. & Ogura, Y. Blastn2dotplots: multiple dot-plot visualizer for genome comparisons.  
+*BMC Bioinformatics* **26**, 146 (2025).  
+https://doi.org/10.1186/s12859-025-06175-4
