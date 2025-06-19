@@ -13,28 +13,34 @@ This project has been tested with the following environment:
 - `numpy 1.24.4`
 
 ## Installation
+### Install via Bioconda (Recommended)
+You can install blastn2dotplots directly from Bioconda:
 
-Create a new conda environment (optional)
 ```
-conda create -n blastn2dotplots-env python=3.8
+conda install -c bioconda blastn2dotplots
+```
+> Note: If you haven't configured Bioconda before, follow the instructions [here](https://bioconda.github.io/) to set up the necessary channels.
+
+### Optional: Create a dedicated conda environment
+```
+conda create -n blastn2dotplots-env blastn2dotplots
 conda activate blastn2dotplots-env
+conda install -c bioconda blastn2dotplots
 ```
 
-Install required libraries (if not already installed)
+### Install manually from source (alternative method)
+If you prefer not to use Bioconda:
+```
+git clone https://github.com/mokuno3430/blastn2dotplots.git
+cd blastn2dotplots
+chmod u+x blastn2dotplot
+```
+
+Required dependencies:
 ```
 conda install matplotlib=3.7.1 numpy=1.24.4 pandas=2.0.3
 ```
 
-Clone the repository
-```
-git clone https://github.com/mokuno3430/blastn2dotplots.git
-```
-
-Grant execute permission to the script
-```
-cd blastn2dotplots
-chmod u+x blastn2dotplot
-```
 
 ## Usage
 ```
