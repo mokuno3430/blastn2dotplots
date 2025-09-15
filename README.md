@@ -33,7 +33,7 @@ If you prefer not to use Bioconda:
 ```
 git clone https://github.com/mokuno3430/blastn2dotplots.git
 cd blastn2dotplots
-chmod u+x blastn2dotplot
+chmod u+x blastn2dotplots
 ```
 
 Required dependencies:
@@ -44,7 +44,7 @@ conda install matplotlib=3.7.1 numpy=1.24.4 pandas=2.0.3
 
 ## Usage
 ```
-usage: blastn2dotplot [-h] -i1 str [-i2 str] --blastn str [--out str]
+usage: blastn2dotplots [-h] -i1 str [-i2 str] --blastn str [--out str]
                       [--highlight str] [--highlight_crossed str]
                       [--min_identity int] [--min_alignlen int] [--line_width float]
                       [--share] [--manual_grid str] [--show_grid] [--grid_color str]
